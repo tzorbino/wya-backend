@@ -1,0 +1,48 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environments
+venv/
+.env
+.env.*
+
+# VSCode settings
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python specific
+*.egg-info/
+dist/
+build/
+
+# Database files (if any local SQLite used)
+*.db
+*.sqlite3
+
+# Alembic migration cache
+alembic/versions/
+
+# Pytest cache
+.pytest_cache/
+
+# MyPy cache
+.mypy_cache/
+
+# Coverage reports
+htmlcov/
+.coverage
+
+# Logs
+*.log
+
+# AWS or cloud config (if generated locally)
+*.pem
+*.key
+
+# Node stuff (if any frontend present in same repo)
+node_modules/
