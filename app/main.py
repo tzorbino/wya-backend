@@ -18,6 +18,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/test-cors")
+def test_cors():
+    return {"message": "CORS is working"}
+
 # ✅ Move this BELOW middleware setup
 Base.metadata.create_all(bind=engine)
 
