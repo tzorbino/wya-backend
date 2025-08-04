@@ -8,7 +8,7 @@ from app.routes import post_routes, comment_routes
 
 app = FastAPI()
 
-origins = ["http://localhost:5173", "http://localhost:3000"]
+origins = ["http://localhost:5173", "https://localhost:5173", "http://localhost:3000", "https://localhost:3000"]
 
 app.add_middleware(
     CORSMiddleware,
