@@ -1,18 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.db import engine, Base
-from app.models.post import Post  # or use import * if preferred
+from app.models.post import Post
 from app.models.vote import Vote
 from app.models.comment import Comment
 from app.routes import post_routes, comment_routes
 
-
-Base.metadata.create_all(bind=engine)
-
 app = FastAPI()
 
-# Allow local dev frontend to connect
-origins = ["http://localhost:3000", "http://localhost:5173"]  # adjust if using Vite/React
+origins = ["http://localhost:5173", "http://localhost:3000"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,6 +17,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ✅ Move this BELOW middleware setup
+Base.metadata.create_all(bind=engine)
 
 @app.get("/")
 def read_root():
@@ -32,4 +31,3 @@ app.include_router(comment_routes.router)
 
 for route in app.routes:
     print(f"{route.path} → {route.methods}")
-# This will print all routes and their methods to the console
