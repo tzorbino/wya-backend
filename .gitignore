@@ -24,8 +24,7 @@ build/
 *.db
 *.sqlite3
 
-# Alembic migration cache
-alembic/versions/
+
 
 # Pytest cache
 .pytest_cache/
