@@ -1,53 +1,26 @@
+# app/dependencies.py
+from typing import Optional, Dict, Any
+from fastapi import Header, Request
 import os
-import requests
-from fastapi import Header, HTTPException, status, Request
-from typing import Optional
-from jose import jwt, JWTError
-from dotenv import load_dotenv
 
-# ✅ Load environment variables
-load_dotenv()
+# --- ENV name compatibility (supports old and new names) ---
+COGNITO_REGION        = os.getenv("COGNITO_REGION", "us-east-1")
+COGNITO_USER_POOL_ID  = os.getenv("COGNITO_USER_POOL_ID") or os.getenv("USER_POOL_ID") or ""
+COGNITO_CLIENT_ID     = os.getenv("COGNITO_CLIENT_ID")    or os.getenv("COGNITO_AUDIENCE") or ""
 
-# ✅ Read from .env
-COGNITO_REGION = os.getenv("COGNITO_REGION")
-USER_POOL_ID = os.getenv("USER_POOL_ID")
-COGNITO_AUDIENCE = os.getenv("COGNITO_AUDIENCE")  # App Client ID
+# Expose what auth.py expects to find in the environment
+os.environ.setdefault("COGNITO_REGION", COGNITO_REGION)
+os.environ.setdefault("COGNITO_USER_POOL_ID", COGNITO_USER_POOL_ID)
+os.environ.setdefault("COGNITO_CLIENT_ID", COGNITO_CLIENT_ID)
 
-COGNITO_ISSUER = f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{USER_POOL_ID}"
-jwks_url = f"{COGNITO_ISSUER}/.well-known/jwks.json"
-jwks = requests.get(jwks_url).json()
+# --- Reuse the new auth logic ---
+from .auth import optional_user, require_user
 
+# Back-compat for existing routers that import get_current_user
+async def get_current_user(request: Request, authorization: Optional[str] = Header(None)) -> Optional[Dict[str, Any]]:
+    """Returns None for anonymous; otherwise decoded claims dict."""
+    # Call the auth helper using its new signature (request first)
+    return await optional_user(request, authorization)
 
-def get_current_user(
-    authorization: Optional[str] = Header(None),
-    request: Request = None
-):
-    if not authorization or not authorization.startswith("Bearer "):
-        # Allow anonymous GET requests
-        if request and request.method == "GET":
-            return None
-        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
-
-    token = authorization.split(" ")[1]
-
-    try:
-        decoded = jwt.decode(
-            token,
-            jwks,
-            algorithms=["RS256"],
-            audience=COGNITO_AUDIENCE,
-            issuer=COGNITO_ISSUER
-        )
-
-        print("✅ Decoded Token", decoded)
-
-        return {
-            "id": decoded["sub"],
-            "email": decoded.get("email"),
-            "username": decoded.get("preferred_username")
-        }
-
-    except JWTError as e:
-        print("❌ JWT verification failed:", e)
-        print("🔍 Token that failed:", token)
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+# If a route should be strictly authenticated, import this instead:
+get_required_user = require_user

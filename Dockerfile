@@ -7,6 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Set working directory
 WORKDIR /app
+ENV PYTHONPATH=/app
 
 # Install system dependencies (needed for psycopg2, etc.)
 RUN apt-get update && apt-get install -y \
@@ -25,6 +26,6 @@ COPY . .
 EXPOSE 8080
 
 # Run the FastAPI app with Uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"]
 
 # trigger redeploy
