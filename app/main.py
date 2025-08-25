@@ -40,9 +40,17 @@ app.include_router(post_routes.router)
 app.include_router(comment_routes.router)
 
 # Example protected endpoint
+# main.py (only /whoami needs a small change)
 @app.get("/whoami")
 def whoami(user: Dict[str, Any] = Depends(require_user)):
-    return {"sub": user.get("sub"), "email": user.get("email"), "aud": user.get("aud")}
+    return {
+        "sub": user.get("sub"),
+        "username": user.get("username"),
+        "client_id": user.get("client_id"),
+        "scope": user.get("scope"),
+        "token_use": user.get("token_use"),
+    }
+
 
 # Example that allows anonymous but enriches if signed in
 @app.get("/feed")

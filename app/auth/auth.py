@@ -7,7 +7,6 @@ from fastapi import Header, HTTPException, Request
 from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_503_SERVICE_UNAVAILABLE
 from jose import jwt
 
-# ---- ENV (use consistent names everywhere) ----
 COGNITO_REGION = os.getenv("COGNITO_REGION", "us-east-1")
 COGNITO_USER_POOL_ID = os.getenv("COGNITO_USER_POOL_ID", "")
 COGNITO_CLIENT_ID = os.getenv("COGNITO_CLIENT_ID", "")  # App Client ID
@@ -15,7 +14,6 @@ COGNITO_CLIENT_ID = os.getenv("COGNITO_CLIENT_ID", "")  # App Client ID
 ISSUER = f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}"
 JWKS_URL = f"{ISSUER}/.well-known/jwks.json"
 
-# ---- JWKS cache ----
 _jwks_cache: Optional[Dict[str, Any]] = None
 _jwks_cached_at: float = 0.0
 _JWKS_TTL_SECONDS = 3600
@@ -52,7 +50,10 @@ def _find_key_for_kid(kid: str, jwks: Dict[str, Any]) -> Optional[Dict[str, Any]
             return k
     return None
 
-async def _decode_id_token(token: str) -> Dict[str, Any]:
+# ---------------------------
+# NEW: decode & verify ACCESS token
+# ---------------------------
+async def _decode_access_token(token: str) -> Dict[str, Any]:
     jwks = await _get_jwks()
     kid = _get_kid(token)
     key = _find_key_for_kid(kid, jwks)
@@ -66,40 +67,66 @@ async def _decode_id_token(token: str) -> Dict[str, Any]:
             raise HTTPException(HTTP_401_UNAUTHORIZED, "Unknown signing key")
 
     try:
+        # Access tokens don't carry 'aud'; check issuer + signature,
+        # then validate token_use and client_id manually.
         claims = jwt.decode(
             token,
-            key,                      # jose accepts JWK dict
-            algorithms=["RS256"],     # Cognito uses RS256
-            audience=COGNITO_CLIENT_ID,
+            key,                      # jose accepts a JWK dict
+            algorithms=["RS256"],
             issuer=ISSUER,
+            options={"verify_aud": False},
         )
     except Exception as e:
         raise HTTPException(HTTP_401_UNAUTHORIZED, f"Invalid token: {e}")
 
+    if claims.get("token_use") != "access":
+        raise HTTPException(HTTP_401_UNAUTHORIZED, "Wrong token_use; expected 'access'")
+    if claims.get("client_id") != COGNITO_CLIENT_ID:
+        raise HTTPException(HTTP_401_UNAUTHORIZED, "Wrong client_id")
+
+    return claims
+
+# (Keep this around only if you still need to validate ID tokens elsewhere)
+async def _decode_id_token(token: str) -> Dict[str, Any]:
+    jwks = await _get_jwks()
+    kid = _get_kid(token)
+    key = _find_key_for_kid(kid, jwks)
+    if not key:
+        global _jwks_cache, _jwks_cached_at
+        _jwks_cache, _jwks_cached_at = None, 0.0
+        jwks = await _get_jwks()
+        key = _find_key_for_kid(kid, jwks)
+        if not key:
+            raise HTTPException(HTTP_401_UNAUTHORIZED, "Unknown signing key")
+    try:
+        claims = jwt.decode(
+            token,
+            key,
+            algorithms=["RS256"],
+            audience=COGNITO_CLIENT_ID,  # ID tokens have 'aud'
+            issuer=ISSUER,
+        )
+    except Exception as e:
+        raise HTTPException(HTTP_401_UNAUTHORIZED, f"Invalid token: {e}")
     if claims.get("token_use") != "id":
         raise HTTPException(HTTP_401_UNAUTHORIZED, "Wrong token_use; expected 'id'")
     return claims
 
-# ---- Dependencies you can use per-route ----
+# ---- Dependencies (switch to ACCESS token) ----
 async def require_user(request: Request, authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(HTTP_401_UNAUTHORIZED, "Missing bearer token")
     token = authorization.split(" ", 1)[1]
-    claims = await _decode_id_token(token)
-    request.state.user = claims     # Request is always present now
+    claims = await _decode_access_token(token)   # ⬅️ access token now
+    request.state.user = claims
     return claims
 
-
 async def optional_user(request: Request, authorization: Optional[str] = Header(None)) -> Optional[Dict[str, Any]]:
-    """Allow anonymous GETs; enrich if a valid Bearer is present."""
-    if not authorization:
+    if not authorization or not authorization.startswith("Bearer "):
         return None
-    if not authorization.startswith("Bearer "):
-        return None
-
     token = authorization.split(" ", 1)[1]
     try:
-        claims = await _decode_id_token(token)
+        claims = await _decode_access_token(token)  # ⬅️ access token now
         request.state.user = claims
         return claims
     except HTTPException:
